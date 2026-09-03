@@ -180,7 +180,6 @@ jobs:
           echo "Executable:"
           ls -lah "$APP/Contents/MacOS/"
 
-
       # ==========================================
       # VERIFY UNIVERSAL 2
       # ==========================================
@@ -209,31 +208,25 @@ jobs:
 
           echo ""
           echo "Architectures:"
-          lipo -archs "$EXEC"
+          lipo "$EXEC" -archs
 
           echo ""
           echo "Detailed architecture information:"
-          lipo -info "$EXEC"
+          lipo "$EXEC" -info
 
           echo ""
           echo "Checking x86_64 slice..."
 
-          if lipo -verify_arch x86_64 "$EXEC"; then
-            echo "OK: x86_64 architecture found."
-          else
-            echo "ERROR: x86_64 architecture NOT found!"
-            exit 1
-          fi
+          lipo "$EXEC" -verify_arch x86_64
+
+          echo "OK: x86_64 architecture found."
 
           echo ""
           echo "Checking arm64 slice..."
 
-          if lipo -verify_arch arm64 "$EXEC"; then
-            echo "OK: arm64 architecture found."
-          else
-            echo "ERROR: arm64 architecture NOT found!"
-            exit 1
-          fi
+          lipo "$EXEC" -verify_arch arm64
+
+          echo "OK: arm64 architecture found."
 
           echo ""
           echo "=================================="
