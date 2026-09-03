@@ -9,11 +9,12 @@ jobs:
     runs-on: macos-14
 
     steps:
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -24,13 +25,29 @@ jobs:
 
       - name: Check project
         run: |
-          echo "Project files:"
+          echo "=================================="
+          echo "PROJECT FILES"
+          echo "=================================="
           ls -la
+
+          echo ""
+          echo "=================================="
+          echo "PYTHON VERSION"
+          echo "=================================="
           python --version
+
+          echo ""
+          echo "=================================="
+          echo "PYSIDE6 VERSION"
+          echo "=================================="
           python -c "import PySide6; print(PySide6.__version__)"
 
       - name: Build application
         run: |
+          echo "=================================="
+          echo "BUILDING APPLICATION"
+          echo "=================================="
+
           pyinstaller \
             --windowed \
             --name "Score Counter" \
@@ -38,11 +55,34 @@ jobs:
             --clean \
             score_counter.py
 
+      - name: Check application
+        run: |
+          echo "=================================="
+          echo "CHECKING APP"
+          echo "=================================="
+
+          ls -lah "dist/"
+
+          if [ ! -d "dist/Score Counter.app" ]; then
+            echo "ERROR: Score Counter.app was not created!"
+            exit 1
+          fi
+
+          echo "APP successfully created!"
+
       - name: Create DMG
         run: |
+          echo "=================================="
+          echo "CREATING DMG"
+          echo "=================================="
+
+          rm -rf dmg
           mkdir -p dmg
+
           cp -R "dist/Score Counter.app" "dmg/"
+
           ln -s /Applications "dmg/Applications"
+
           hdiutil create \
             -volname "Score Counter" \
             -srcfolder "dmg" \
@@ -50,8 +90,24 @@ jobs:
             -format UDZO \
             "Score-Counter-macOS.dmg"
 
+      - name: Check DMG
+        run: |
+          echo "=================================="
+          echo "CHECKING DMG"
+          echo "=================================="
+
+          if [ ! -f "Score-Counter-macOS.dmg" ]; then
+            echo "ERROR: DMG was not created!"
+            exit 1
+          fi
+
+          ls -lh "Score-Counter-macOS.dmg"
+
+          echo ""
+          echo "DMG successfully created!"
+
       - name: Upload DMG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Score-Counter-macOS
           path: Score-Counter-macOS.dmg
