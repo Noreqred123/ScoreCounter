@@ -10,12 +10,18 @@ jobs:
 
     steps:
 
+      # ==========================================
+      # CHECKOUT
+      # ==========================================
+
       - name: Checkout
         uses: actions/checkout@v6
 
-      # --------------------------------------------------
-      # Install Universal2 Python
-      # --------------------------------------------------
+
+      # ==========================================
+      # INSTALL UNIVERSAL2 PYTHON
+      # ==========================================
+
       - name: Setup Universal2 Python
         shell: bash
         run: |
@@ -47,33 +53,45 @@ jobs:
           echo "Python version:"
           /Library/Frameworks/Python.framework/Versions/3.12/bin/python3 --version
 
-      # --------------------------------------------------
-      # Setup PATH
-      # --------------------------------------------------
+
+      # ==========================================
+      # ADD PYTHON TO PATH
+      # ==========================================
+
       - name: Configure Python
         shell: bash
         run: |
           echo "/Library/Frameworks/Python.framework/Versions/3.12/bin" >> "$GITHUB_PATH"
 
-      # --------------------------------------------------
-      # Install dependencies
-      # --------------------------------------------------
+
+      # ==========================================
+      # INSTALL DEPENDENCIES
+      # ==========================================
+
       - name: Install dependencies
         shell: bash
         run: |
           set -e
 
           python3 -m pip install --upgrade pip
-          python3 -m pip install --upgrade PySide6 PyInstaller
 
-      # --------------------------------------------------
-      # Check environment
-      # --------------------------------------------------
+          python3 -m pip install \
+            --upgrade \
+            PySide6 \
+            PyInstaller
+
+
+      # ==========================================
+      # CHECK ENVIRONMENT
+      # ==========================================
+
       - name: Check environment
         shell: bash
         run: |
+          set -e
+
           echo "=================================="
-          echo "ENVIRONMENT"
+          echo "ENVIRONMENT CHECK"
           echo "=================================="
 
           echo ""
@@ -89,20 +107,22 @@ jobs:
           file "$(which python3)"
 
           echo ""
-          echo "PySide6:"
+          echo "PySide6 version:"
           python3 -c "import PySide6; print(PySide6.__version__)"
 
           echo ""
-          echo "PyInstaller:"
+          echo "PyInstaller version:"
           pyinstaller --version
 
           echo ""
           echo "Project files:"
           ls -la
 
-      # --------------------------------------------------
-      # Build Universal 2 application
-      # --------------------------------------------------
+
+      # ==========================================
+      # BUILD UNIVERSAL 2 APPLICATION
+      # ==========================================
+
       - name: Build Universal 2 application
         shell: bash
         run: |
@@ -112,7 +132,8 @@ jobs:
           echo "BUILDING UNIVERSAL 2 APPLICATION"
           echo "=================================="
 
-          rm -rf build dist
+          rm -rf build
+          rm -rf dist
 
           pyinstaller \
             --windowed \
@@ -122,10 +143,15 @@ jobs:
             --target-arch universal2 \
             score_counter.py
 
-      # --------------------------------------------------
-      # Verify application
-      # --------------------------------------------------
-      - name: Check Universal 2 application
+          echo ""
+          echo "BUILD FINISHED"
+
+
+      # ==========================================
+      # CHECK APP
+      # ==========================================
+
+      - name: Check application
         shell: bash
         run: |
           set -e
@@ -137,75 +163,93 @@ jobs:
           APP="dist/Score Counter.app"
 
           if [ ! -d "$APP" ]; then
+            echo ""
             echo "ERROR: Score Counter.app was not created!"
             exit 1
           fi
 
           echo ""
-          echo "Application:"
+          echo "Application created successfully:"
           ls -lah "dist/"
 
           echo ""
-          echo "Main executable:"
-          file "$APP/Contents/MacOS/Score Counter"
+          echo "Application structure:"
+          ls -lah "$APP/Contents/"
 
           echo ""
-          echo "Architecture check:"
+          echo "Executable:"
+          ls -lah "$APP/Contents/MacOS/"
 
-          ARCH_OUTPUT=$(file "$APP/Contents/MacOS/Score Counter")
+      # ==========================================
+      # VERIFY UNIVERSAL 2
+      # ==========================================
 
-          echo "$ARCH_OUTPUT"
-
-          if echo "$ARCH_OUTPUT" | grep -q "universal"; then
-            echo ""
-            echo "SUCCESS: Universal 2 executable detected!"
-          else
-            echo ""
-            echo "ERROR: Application is NOT Universal 2!"
-            exit 1
-          fi
-
-      # --------------------------------------------------
-      # Verify both architectures
-      # --------------------------------------------------
-      - name: Verify Intel and Apple Silicon
+      - name: Verify Universal 2 architecture
         shell: bash
         run: |
           set -e
 
+          echo "=================================="
+          echo "VERIFYING UNIVERSAL 2"
+          echo "=================================="
+
           APP="dist/Score Counter.app"
           EXEC="$APP/Contents/MacOS/Score Counter"
 
-          echo "=================================="
-          echo "VERIFYING ARCHITECTURES"
-          echo "=================================="
+          if [ ! -f "$EXEC" ]; then
+            echo ""
+            echo "ERROR: Application executable not found!"
+            exit 1
+          fi
 
           echo ""
-          echo "x86_64:"
-          lipo -archs "$EXEC"
+          echo "Executable:"
+          echo "$EXEC"
+
+          echo ""
+          echo "Architectures:"
+          lipo "$EXEC" -archs
 
           echo ""
           echo "Detailed architecture information:"
-          lipo -info "$EXEC"
+          lipo "$EXEC" -info
 
           echo ""
-          echo "Testing x86_64 slice:"
-          arch -x86_64 "$EXEC" --help >/dev/null 2>&1 || true
+          echo "Checking x86_64 slice..."
 
-          echo "x86_64 slice detected."
+          lipo "$EXEC" -verify_arch x86_64
 
-          echo ""
-          echo "Testing arm64 slice:"
-          arch -arm64 "$EXEC" --help >/dev/null 2>&1 || true
-
-          echo "arm64 slice detected."
+          echo "OK: x86_64 architecture found."
 
           echo ""
-          echo "Universal 2 verification completed."
+          echo "Checking arm64 slice..."
 
-      # --------------------------------------------------
-      # Create DMG
-      # --------------------------------------------------
+          lipo "$EXEC" -verify_arch arm64
+
+          echo "OK: arm64 architecture found."
+
+          echo ""
+          echo "=================================="
+          echo "UNIVERSAL 2 VERIFICATION SUCCESS"
+          echo "=================================="
+
+          echo ""
+          echo "Intel Macs:"
+          echo "  x86_64"
+
+          echo ""
+          echo "Apple Silicon Macs:"
+          echo "  arm64"
+
+          echo ""
+          echo "Result:"
+          echo "  Universal 2 = YES"
+
+
+      # ==========================================
+      # CREATE DMG
+      # ==========================================
+
       - name: Create DMG
         shell: bash
         run: |
@@ -220,9 +264,22 @@ jobs:
 
           mkdir -p dmg
 
-          cp -R "dist/Score Counter.app" "dmg/"
+          echo ""
+          echo "Copying application..."
 
-          ln -s /Applications "dmg/Applications"
+          cp -R \
+            "dist/Score Counter.app" \
+            "dmg/"
+
+          echo ""
+          echo "Creating Applications shortcut..."
+
+          ln -s \
+            /Applications \
+            "dmg/Applications"
+
+          echo ""
+          echo "Creating DMG..."
 
           hdiutil create \
             -volname "Score Counter" \
@@ -231,9 +288,14 @@ jobs:
             -format UDZO \
             "Score-Counter.dmg"
 
-      # --------------------------------------------------
-      # Verify DMG
-      # --------------------------------------------------
+          echo ""
+          echo "DMG created successfully."
+
+
+      # ==========================================
+      # CHECK DMG
+      # ==========================================
+
       - name: Check DMG
         shell: bash
         run: |
@@ -244,19 +306,29 @@ jobs:
           echo "=================================="
 
           if [ ! -f "Score-Counter.dmg" ]; then
+            echo ""
             echo "ERROR: Score-Counter.dmg was not created!"
             exit 1
           fi
 
           echo ""
+          echo "DMG file:"
           ls -lh "Score-Counter.dmg"
 
           echo ""
-          echo "DMG successfully created!"
+          echo "DMG information:"
+          hdiutil imageinfo "Score-Counter.dmg" | head -40
 
-      # --------------------------------------------------
-      # Upload artifact
-      # --------------------------------------------------
+          echo ""
+          echo "=================================="
+          echo "DMG SUCCESSFULLY CREATED"
+          echo "=================================="
+
+
+      # ==========================================
+      # UPLOAD DMG
+      # ==========================================
+
       - name: Upload DMG
         uses: actions/upload-artifact@v7
         with:
