@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-macos:
-    name: Build macOS DMG
+    name: Build macOS Universal 2 DMG
     runs-on: macos-14
 
     steps:
@@ -13,70 +13,211 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
+      # --------------------------------------------------
+      # Install Universal2 Python
+      # --------------------------------------------------
+      - name: Setup Universal2 Python
+        shell: bash
+        run: |
+          set -e
 
+          echo "=================================="
+          echo "INSTALLING UNIVERSAL2 PYTHON"
+          echo "=================================="
+
+          PYTHON_VERSION="3.12.10"
+
+          curl -L \
+            "https://www.python.org/ftp/python/${PYTHON_VERSION}/python-${PYTHON_VERSION}-macos11.pkg" \
+            -o python.pkg
+
+          sudo installer \
+            -pkg python.pkg \
+            -target /
+
+          echo ""
+          echo "Python installations:"
+          ls -la /Library/Frameworks/Python.framework/Versions/
+
+          echo ""
+          echo "Python architecture:"
+          file /Library/Frameworks/Python.framework/Versions/3.12/bin/python3
+
+          echo ""
+          echo "Python version:"
+          /Library/Frameworks/Python.framework/Versions/3.12/bin/python3 --version
+
+      # --------------------------------------------------
+      # Setup PATH
+      # --------------------------------------------------
+      - name: Configure Python
+        shell: bash
+        run: |
+          echo "/Library/Frameworks/Python.framework/Versions/3.12/bin" >> "$GITHUB_PATH"
+
+      # --------------------------------------------------
+      # Install dependencies
+      # --------------------------------------------------
       - name: Install dependencies
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install PySide6 PyInstaller
+          set -e
 
-      - name: Check project
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade PySide6 PyInstaller
+
+      # --------------------------------------------------
+      # Check environment
+      # --------------------------------------------------
+      - name: Check environment
+        shell: bash
         run: |
           echo "=================================="
-          echo "PROJECT FILES"
+          echo "ENVIRONMENT"
           echo "=================================="
+
+          echo ""
+          echo "Python:"
+          python3 --version
+
+          echo ""
+          echo "Python executable:"
+          which python3
+
+          echo ""
+          echo "Python architecture:"
+          file "$(which python3)"
+
+          echo ""
+          echo "PySide6:"
+          python3 -c "import PySide6; print(PySide6.__version__)"
+
+          echo ""
+          echo "PyInstaller:"
+          pyinstaller --version
+
+          echo ""
+          echo "Project files:"
           ls -la
 
-          echo ""
-          echo "=================================="
-          echo "PYTHON VERSION"
-          echo "=================================="
-          python --version
-
-          echo ""
-          echo "=================================="
-          echo "PYSIDE6 VERSION"
-          echo "=================================="
-          python -c "import PySide6; print(PySide6.__version__)"
-
-      - name: Build application
+      # --------------------------------------------------
+      # Build Universal 2 application
+      # --------------------------------------------------
+      - name: Build Universal 2 application
+        shell: bash
         run: |
+          set -e
+
           echo "=================================="
-          echo "BUILDING APPLICATION"
+          echo "BUILDING UNIVERSAL 2 APPLICATION"
           echo "=================================="
+
+          rm -rf build dist
 
           pyinstaller \
             --windowed \
             --name "Score Counter" \
             --noconfirm \
             --clean \
+            --target-arch universal2 \
             score_counter.py
 
-      - name: Check application
+      # --------------------------------------------------
+      # Verify application
+      # --------------------------------------------------
+      - name: Check Universal 2 application
+        shell: bash
         run: |
+          set -e
+
           echo "=================================="
-          echo "CHECKING APP"
+          echo "CHECKING APPLICATION"
           echo "=================================="
 
-          ls -lah "dist/"
+          APP="dist/Score Counter.app"
 
-          if [ ! -d "dist/Score Counter.app" ]; then
+          if [ ! -d "$APP" ]; then
             echo "ERROR: Score Counter.app was not created!"
             exit 1
           fi
 
-          echo "APP successfully created!"
+          echo ""
+          echo "Application:"
+          ls -lah "dist/"
 
-      - name: Create DMG
+          echo ""
+          echo "Main executable:"
+          file "$APP/Contents/MacOS/Score Counter"
+
+          echo ""
+          echo "Architecture check:"
+
+          ARCH_OUTPUT=$(file "$APP/Contents/MacOS/Score Counter")
+
+          echo "$ARCH_OUTPUT"
+
+          if echo "$ARCH_OUTPUT" | grep -q "universal"; then
+            echo ""
+            echo "SUCCESS: Universal 2 executable detected!"
+          else
+            echo ""
+            echo "ERROR: Application is NOT Universal 2!"
+            exit 1
+          fi
+
+      # --------------------------------------------------
+      # Verify both architectures
+      # --------------------------------------------------
+      - name: Verify Intel and Apple Silicon
+        shell: bash
         run: |
+          set -e
+
+          APP="dist/Score Counter.app"
+          EXEC="$APP/Contents/MacOS/Score Counter"
+
+          echo "=================================="
+          echo "VERIFYING ARCHITECTURES"
+          echo "=================================="
+
+          echo ""
+          echo "x86_64:"
+          lipo -archs "$EXEC"
+
+          echo ""
+          echo "Detailed architecture information:"
+          lipo -info "$EXEC"
+
+          echo ""
+          echo "Testing x86_64 slice:"
+          arch -x86_64 "$EXEC" --help >/dev/null 2>&1 || true
+
+          echo "x86_64 slice detected."
+
+          echo ""
+          echo "Testing arm64 slice:"
+          arch -arm64 "$EXEC" --help >/dev/null 2>&1 || true
+
+          echo "arm64 slice detected."
+
+          echo ""
+          echo "Universal 2 verification completed."
+
+      # --------------------------------------------------
+      # Create DMG
+      # --------------------------------------------------
+      - name: Create DMG
+        shell: bash
+        run: |
+          set -e
+
           echo "=================================="
           echo "CREATING DMG"
           echo "=================================="
 
           rm -rf dmg
+          rm -f "Score-Counter.dmg"
+
           mkdir -p dmg
 
           cp -R "dist/Score Counter.app" "dmg/"
@@ -88,27 +229,37 @@ jobs:
             -srcfolder "dmg" \
             -ov \
             -format UDZO \
-            "Score-Counter-macOS.dmg"
+            "Score-Counter.dmg"
 
+      # --------------------------------------------------
+      # Verify DMG
+      # --------------------------------------------------
       - name: Check DMG
+        shell: bash
         run: |
+          set -e
+
           echo "=================================="
           echo "CHECKING DMG"
           echo "=================================="
 
-          if [ ! -f "Score-Counter-macOS.dmg" ]; then
-            echo "ERROR: DMG was not created!"
+          if [ ! -f "Score-Counter.dmg" ]; then
+            echo "ERROR: Score-Counter.dmg was not created!"
             exit 1
           fi
 
-          ls -lh "Score-Counter-macOS.dmg"
+          echo ""
+          ls -lh "Score-Counter.dmg"
 
           echo ""
           echo "DMG successfully created!"
 
+      # --------------------------------------------------
+      # Upload artifact
+      # --------------------------------------------------
       - name: Upload DMG
         uses: actions/upload-artifact@v7
         with:
-          name: Score-Counter-macOS
-          path: Score-Counter-macOS.dmg
+          name: Score-Counter-macOS-Universal2
+          path: Score-Counter.dmg
           if-no-files-found: error
